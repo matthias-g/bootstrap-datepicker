@@ -5,8 +5,8 @@
  */
 
 (function(factory){
-    if (typeof define === "function" && define.amd) {
-        define(["jquery"], factory);
+    if (typeof define === 'function' && define.amd) {
+        define(['jquery'], factory);
     } else if (typeof exports === 'object') {
         factory(require('jquery'));
     } else {
@@ -269,7 +269,7 @@
 			var plc = String(o.orientation).toLowerCase().split(/\s+/g),
 				_plc = o.orientation.toLowerCase();
 			plc = $.grep(plc, function(word){
-				return /^auto|left|right|top|bottom$/.test(word);
+				return /^auto|left|right|center|top|bottom$/.test(word);
 			});
 			o.orientation = {x: 'auto', y: 'auto'};
 			if (!_plc || _plc === 'auto')
@@ -282,13 +282,14 @@
 						break;
 					case 'left':
 					case 'right':
+					case 'center':
 						o.orientation.x = plc[0];
 						break;
 				}
 			}
 			else {
 				_plc = $.grep(plc, function(word){
-					return /^left|right$/.test(word);
+					return /^left|right|center$/.test(word);
 				});
 				o.orientation.x = _plc[0] || 'auto';
 
@@ -679,13 +680,15 @@
 
 			this.picker.removeClass(
 				'datepicker-orient-top datepicker-orient-bottom '+
-				'datepicker-orient-right datepicker-orient-left'
+				'datepicker-orient-right datepicker-orient-left datepicker-orient-center'
 			);
 
 			if (this.o.orientation.x !== 'auto'){
 				this.picker.addClass('datepicker-orient-' + this.o.orientation.x);
 				if (this.o.orientation.x === 'right')
 					left -= calendarWidth - width;
+				if (this.o.orientation.x === 'center')
+					left -= (calendarWidth - width) / 2;
 			}
 			// auto x orientation is best-placement: if it crosses a window
 			// edge, fudge it sideways
@@ -695,9 +698,18 @@
 					this.picker.addClass('datepicker-orient-left');
 					left -= offset.left - visualPadding;
 				} else if (left + calendarWidth > windowWidth) {
-					// the calendar passes the widow right edge. Align it to component right side
-					this.picker.addClass('datepicker-orient-right');
-					left += width - calendarWidth;
+					// the calendar passes the window right edge
+					if (left + width < calendarWidth) {
+						// pulling the calendar left would move it outside the left window edge.
+						// Center it or move it to left edge if centering would still move it out of sight
+						this.picker.addClass('datepicker-orient-center');
+						left = Math.max(left + (width - calendarWidth) / 2, 0);
+						// If calendar passes window right edge center it with respect to the window
+						left = Math.min(left, windowWidth - calendarWidth);
+					} else {
+						this.picker.addClass('datepicker-orient-right');
+						left += width - calendarWidth;
+					}
 				} else {
 					if (this.o.rtl) {
 						// Default to right
@@ -996,17 +1008,17 @@
 				if (weekDay === this.o.weekStart){
 					html.push('<tr>');
 					if (this.o.calendarWeeks){
-						// ISO 8601: First week contains first thursday.
-						// ISO also states week starts on Monday, but we can be more abstract here.
+						// First week contains first weekday specified by this.o.firstCalendarWeekDay (4 = Thursday for ISO 8601)
 						var
 							// Start of current week: based on weekstart/current date
-							ws = new Date(+prevMonth + (this.o.weekStart - weekDay - 7) % 7 * 864e5),
-							// Thursday of this week
-							th = new Date(Number(ws) + (7 + 4 - ws.getUTCDay()) % 7 * 864e5),
-							// First Thursday of year, year from thursday
-							yth = new Date(Number(yth = UTCDate(th.getUTCFullYear(), 0, 1)) + (7 + 4 - yth.getUTCDay()) % 7 * 864e5),
-							// Calendar week: ms between thursdays, div ms per day, div 7 days
-							calWeek = (th - yth) / 864e5 / 7 + 1;
+							weekStart = new Date(+prevMonth + (this.o.weekStart - weekDay - 7) % 7 * 864e5),
+							// Weekday that must be included in first calendar week of year (in current week)
+							currentFirstCWDay = new Date(Number(weekStart) + (7 + this.o.firstCalendarWeekDay - weekStart.getUTCDay()) % 7 * 864e5),
+							yearStart = UTCDate(currentFirstCWDay.getUTCFullYear(), 0, 1),
+							// First occurrence of this weekday in the year from currentFirstCWDay
+							firstCWDay = new Date(Number(yearStart) + (7 + this.o.firstCalendarWeekDay - yearStart.getUTCDay()) % 7 * 864e5),
+							// Calendar week: ms between firstCalendarWeekDay in first week of the year and in current week, div ms per day, div 7 days
+							calWeek = (currentFirstCWDay - firstCWDay) / 864e5 / 7 + 1;
 						html.push('<td class="cw">'+ calWeek +'</td>');
 					}
 				}
@@ -1141,10 +1153,6 @@
 				nextIsDisabled,
 				factor = 1;
 			switch (this.viewMode){
-				case 0:
-					prevIsDisabled = year <= startYear && month <= startMonth;
-					nextIsDisabled = year >= endYear && month >= endMonth;
-					break;
 				case 4:
 					factor *= 10;
 					/* falls through */
@@ -1155,8 +1163,12 @@
 					factor *= 10;
 					/* falls through */
 				case 1:
-					prevIsDisabled = Math.floor(year / factor) * factor <= startYear;
-					nextIsDisabled = Math.floor(year / factor) * factor + factor >= endYear;
+					prevIsDisabled = Math.floor(year / factor) * factor < startYear;
+					nextIsDisabled = Math.floor(year / factor) * factor + factor > endYear;
+					break;
+				case 0:
+					prevIsDisabled = year <= startYear && month < startMonth;
+					nextIsDisabled = year >= endYear && month > endMonth;
 					break;
 			}
 
@@ -1532,6 +1544,11 @@
 				p.setRange(range);
 			});
 		},
+		clearDates: function(){
+			$.each(this.pickers, function(i, p){
+				p.clearDates();
+			});
+		},
 		dateUpdated: function(e){
 			// `this.updating` is a workaround for preventing infinite recursion
 			// between `changeDate` triggering and `setUTCDate` calling.  Until
@@ -1696,6 +1713,7 @@
 		todayHighlight: false,
 		updateViewDate: true,
 		weekStart: 0,
+		firstCalendarWeekDay: 6,
 		disableTouchKeyboard: false,
 		enableOnReadonly: true,
 		showOnFocus: true,
@@ -1712,7 +1730,8 @@
 	var locale_opts = $.fn.datepicker.locale_opts = [
 		'format',
 		'rtl',
-		'weekStart'
+		'weekStart',
+		'firstCalendarWeekDay'
 	];
 	$.fn.datepicker.Constructor = Datepicker;
 	var dates = $.fn.datepicker.dates = {

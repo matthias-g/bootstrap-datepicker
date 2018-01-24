@@ -56,6 +56,12 @@
 .datepicker-dropdown.datepicker-orient-right:after {
   right: 7px;
 }
+.datepicker-dropdown.datepicker-orient-center:before {
+  left: 47%;
+}
+.datepicker-dropdown.datepicker-orient-center:after {
+  left: 47%;
+}
 .datepicker-dropdown.datepicker-orient-bottom:before {
   top: -7px;
 }
